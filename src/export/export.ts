@@ -1,8 +1,17 @@
-import { deriveKeyFromPassphrase, fromB64, PBKDF2_ITERATIONS, randomBytes, sealJson, toB64, unsealJson } from '../crypto/crypto';
+import {
+  deriveKeyFromPassphrase,
+  fromB64,
+  PBKDF2_ITERATIONS,
+  randomBytes,
+  sealJson,
+  toB64,
+  unsealJson,
+} from '../crypto/crypto';
 import { findCycles, findPeriods, predict } from '../domain/cycles';
 import { formatDate, todayISO } from '../domain/dates';
 import type { DayEntry, Settings, SyncRecord } from '../domain/types';
 import type { Vault } from '../db/vault';
+import { STRINGS, translateTag, type Lang } from '../i18n';
 
 export function download(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
@@ -22,13 +31,15 @@ function csvCell(v: string): string {
 export function exportCsv(entries: DayEntry[]): void {
   const header = ['date', 'period', 'flow', 'symptoms', 'moods', 'note'];
   const rows = entries.map((e) =>
-    [e.date, e.period ? 'yes' : 'no', e.flow ?? '', e.symptoms.join('; '), e.moods.join('; '), e.note].map(csvCell).join(','),
+    [e.date, e.period ? 'yes' : 'no', e.flow ?? '', e.symptoms.join('; '), e.moods.join('; '), e.note]
+      .map(csvCell)
+      .join(','),
   );
   // BOM so Excel opens UTF-8 correctly.
   download(`peez-${todayISO()}.csv`, new Blob(['\ufeff' + [header.join(','), ...rows].join('\n')], { type: 'text/csv' }));
 }
 
-export async function exportPdf(entries: DayEntry[], settings: Settings): Promise<void> {
+export async function exportPdf(entries: DayEntry[], settings: Settings, lang: Lang = 'en'): Promise<void> {
   const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const today = todayISO();
@@ -36,6 +47,7 @@ export async function exportPdf(entries: DayEntry[], settings: Settings): Promis
   const cycles = findCycles(periods);
   const p = predict(entries, settings, today);
   const long = { day: 'numeric', month: 'short', year: 'numeric' } as const;
+  const tp = STRINGS[lang].pdf;
 
   let y = 20;
   const line = (text: string, size = 11, bold = false, indent = 15) => {
@@ -51,45 +63,42 @@ export async function exportPdf(entries: DayEntry[], settings: Settings): Promis
   };
 
   doc.setTextColor(200, 90, 130);
-  line('Menstrual cycle summary', 18, true);
+  line(tp.title, 18, true);
   doc.setTextColor(60, 60, 60);
-  line(`Generated ${formatDate(today, long)} with Peez`, 9);
+  line(tp.generated(formatDate(today, long, lang)), 9);
   y += 4;
 
-  line('Overview', 13, true);
-  line(`Average cycle length: ${p.avgCycle} days${p.basedOn ? ` (last ${p.basedOn} cycles)` : ' (default — not enough data)'}`);
-  line(`Average period length: ${p.avgPeriod} days`);
+  line(tp.overview, 13, true);
+  line(tp.avgCycle(p.avgCycle, p.basedOn));
+  line(tp.avgPeriod(p.avgPeriod));
   if (cycles.length) {
     const lens = cycles.map((c) => c.length);
-    line(`Shortest / longest cycle: ${Math.min(...lens)} / ${Math.max(...lens)} days`);
+    line(tp.shortestLongest(Math.min(...lens), Math.max(...lens)));
   }
-  line(`Periods recorded: ${periods.length}`);
-  if (p.nextStart) line(`Next period predicted around: ${formatDate(p.upcoming[0].start, long)} (±${p.range} days)`);
+  line(tp.periodsRecorded(periods.length));
+  if (p.nextStart) line(tp.nextPredicted(formatDate(p.upcoming[0].start, long, lang), p.range));
   y += 4;
 
-  line('Period history', 13, true);
+  line(tp.periodHistory, 13, true);
   const cyc = new Map(cycles.map((c) => [c.start, c.length]));
   for (const per of [...periods].reverse()) {
     const c = cyc.get(per.start);
-    line(
-      `${formatDate(per.start, long)} – ${formatDate(per.end, long)}   ·   ${per.length} days${c ? `   ·   cycle ${c} days` : ''}`,
-      10,
-    );
+    line(tp.periodRow(formatDate(per.start, long, lang), formatDate(per.end, long, lang), per.length, c), 10);
   }
   y += 4;
 
   const counts = new Map<string, number>();
   for (const e of entries) for (const s of e.symptoms) counts.set(s, (counts.get(s) ?? 0) + 1);
   if (counts.size) {
-    line('Symptoms (days logged)', 13, true);
-    for (const [s, n] of [...counts].sort((a, b) => b[1] - a[1])) line(`${s}: ${n}`, 10);
+    line(tp.symptomsTitle, 13, true);
+    for (const [s, n] of [...counts].sort((a, b) => b[1] - a[1])) line(`${translateTag(lang, s)}: ${n}`, 10);
     y += 4;
   }
 
   const notes = entries.filter((e) => e.note.trim());
   if (notes.length) {
-    line('Notes', 13, true);
-    for (const e of [...notes].reverse()) line(`${formatDate(e.date, long)}: ${e.note.trim()}`, 10);
+    line(tp.notesTitle, 13, true);
+    for (const e of [...notes].reverse()) line(`${formatDate(e.date, long, lang)}: ${e.note.trim()}`, 10);
   }
 
   doc.save(`peez-summary-${today}.pdf`);

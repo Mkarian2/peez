@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
+import { useI18n } from '../i18n';
 
 /** Camera QR scanner using jsQR (works in Chrome on Android and Windows). */
 export function QrScanner({ onResult }: { onResult: (text: string) => void }) {
+  const { t } = useI18n();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState('');
 
@@ -24,7 +26,7 @@ export function QrScanner({ onResult }: { onResult: (text: string) => void }) {
         const code = jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' });
         if (code?.data) {
           stopped = true;
-          stream?.getTracks().forEach((t) => t.stop());
+          stream?.getTracks().forEach((tr) => tr.stop());
           onResult(code.data);
           return;
         }
@@ -36,7 +38,7 @@ export function QrScanner({ onResult }: { onResult: (text: string) => void }) {
       .getUserMedia({ video: { facingMode: 'environment' }, audio: false })
       .then((s) => {
         if (stopped) {
-          s.getTracks().forEach((t) => t.stop());
+          s.getTracks().forEach((tr) => tr.stop());
           return;
         }
         stream = s;
@@ -45,14 +47,14 @@ export function QrScanner({ onResult }: { onResult: (text: string) => void }) {
         v.play().catch(() => undefined);
         raf = requestAnimationFrame(tick);
       })
-      .catch(() => setError('Could not access the camera. You can paste the pairing code instead.'));
+      .catch(() => setError(t.sync.cameraError));
 
     return () => {
       stopped = true;
       cancelAnimationFrame(raf);
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((tr) => tr.stop());
     };
-  }, [onResult]);
+  }, [onResult, t.sync.cameraError]);
 
   return (
     <div className="scanner">

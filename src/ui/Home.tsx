@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { predict, predictionMarks } from '../domain/cycles';
 import { diffDays, formatDate, todayISO } from '../domain/dates';
+import { useI18n } from '../i18n';
 import { useApp } from './context';
 import { Calendar } from './Calendar';
 import { DayEditor } from './DayEditor';
@@ -17,12 +18,7 @@ export function Home() {
     <>
       <Summary prediction={prediction} today={today} onLogToday={() => setEditing(today)} />
       <div className="card">
-        <Calendar
-          entries={entries}
-          marks={marks}
-          today={today}
-          onSelect={setEditing}
-        />
+        <Calendar entries={entries} marks={marks} today={today} onSelect={setEditing} />
       </div>
       <DayEditor key={editing ?? 'none'} date={editing} onClose={() => setEditing(null)} />
     </>
@@ -38,30 +34,35 @@ function Summary({
   today: string;
   onLogToday: () => void;
 }) {
+  const { lang, t } = useI18n();
+  const fmt = (d: string) => formatDate(d, { day: 'numeric', month: 'short' }, lang);
+
   let headline: string;
   let sub = '';
   if (!p.lastPeriod) {
-    headline = 'Welcome!';
-    sub = 'Tap the first day of your last period in the calendar to start predictions.';
+    headline = t.home.welcomeHeadline;
+    sub = t.home.welcomeSub;
   } else if (p.inPeriod) {
-    headline = `Period · day ${p.cycleDay}`;
-    sub = `Next one expected around ${formatDate(p.upcoming[1]?.start ?? p.upcoming[0].start)}`;
+    headline = t.home.periodDay(p.cycleDay!);
+    sub = t.home.nextExpectedAround(fmt(p.upcoming[1]?.start ?? p.upcoming[0].start));
   } else if (p.lateBy > 0) {
-    headline = `Period ${p.lateBy} day${p.lateBy > 1 ? 's' : ''} late`;
-    sub = `Expected ${formatDate(p.nextStart!)} · cycle day ${p.cycleDay}`;
+    headline = t.home.periodLate(p.lateBy);
+    sub = t.home.expectedCycleDay(fmt(p.nextStart!), p.cycleDay!);
   } else {
     const days = diffDays(today, p.nextStart!);
-    headline = days === 0 ? 'Period expected today' : `Period in ${days} day${days > 1 ? 's' : ''}`;
-    sub = `Around ${formatDate(p.nextStart!)} (±${p.range}d) · cycle day ${p.cycleDay}`;
+    headline = days === 0 ? t.home.periodExpectedToday : t.home.periodInDays(days);
+    sub = t.home.aroundDateCycleDay(fmt(p.nextStart!), p.range, p.cycleDay!);
   }
 
-  const fertile = [p.current, ...p.upcoming].find((c) => c && c.fertileEnd >= today && (!p.lastPeriod || c.fertileStart > p.lastPeriod.start));
+  const fertile = [p.current, ...p.upcoming].find(
+    (c) => c && c.fertileEnd >= today && (!p.lastPeriod || c.fertileStart > p.lastPeriod.start),
+  );
   let fertileText = '';
   if (fertile && p.lastPeriod) {
     fertileText =
       fertile.fertileStart <= today
-        ? `Fertile window now · until ${formatDate(fertile.fertileEnd)}`
-        : `Fertile window ${formatDate(fertile.fertileStart)} – ${formatDate(fertile.fertileEnd)}`;
+        ? t.home.fertileNow(fmt(fertile.fertileEnd))
+        : t.home.fertileRange(fmt(fertile.fertileStart), fmt(fertile.fertileEnd));
   }
 
   return (
@@ -70,12 +71,10 @@ function Summary({
         <div className="big">{headline}</div>
         <div className="muted">{sub}</div>
         {fertileText && <div className="fertile-text">{fertileText}</div>}
-        {p.lastPeriod && p.basedOn < 2 && (
-          <div className="muted small">Predictions get better after a few cycles.</div>
-        )}
+        {p.lastPeriod && p.basedOn < 2 && <div className="muted small">{t.home.betterAfterCycles}</div>}
       </div>
       <button className="btn primary" onClick={onLogToday}>
-        Log today
+        {t.home.logToday}
       </button>
     </div>
   );

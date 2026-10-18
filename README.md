@@ -1,5 +1,7 @@
 # 💧 Peez — Private Period Tracker
 
+🇬🇧 **English** · 🇫🇷 [Lire en français](README.fr.md)
+
 **Live app:** [**https://mkarian2.github.io/peez/**](https://mkarian2.github.io/peez/)
 
 Peez is a private, offline-first period tracker Progressive Web App (PWA) for Android and desktop.

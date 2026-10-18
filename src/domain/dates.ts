@@ -28,11 +28,17 @@ export function diffDays(a: string, b: string): number {
   return Math.round((utc(b) - utc(a)) / 86_400_000);
 }
 
-export function formatDate(iso: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' }): string {
+import { localeFor, type Lang } from '../i18n';
+
+export function formatDate(
+  iso: string,
+  opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' },
+  lang: Lang = 'en',
+): string {
   const [y, m, d] = iso.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-GB', opts);
+  return new Date(y, m - 1, d).toLocaleDateString(localeFor(lang), opts);
 }
 
-export function formatLong(iso: string): string {
-  return formatDate(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+export function formatLong(iso: string, lang: Lang = 'en'): string {
+  return formatDate(iso, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, lang);
 }

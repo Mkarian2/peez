@@ -662,3 +662,14 @@ section {
   text-align: center;
   z-index: 10;
 }
+
+.lang-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-self: center;
+}
+.lang-toggle .chip {
+  padding: 5px 10px;
+  font-size: 0.8rem;
+}
+

@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react';
 import type { DayMark } from '../domain/cycles';
 import { toISO } from '../domain/dates';
 import type { DayEntry } from '../domain/types';
-
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+import { localeFor, useI18n } from '../i18n';
 
 export function Calendar({
   entries,
@@ -16,6 +15,7 @@ export function Calendar({
   today: string;
   onSelect: (date: string) => void;
 }) {
+  const { lang, t } = useI18n();
   const [month, setMonth] = useState(() => {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -34,7 +34,7 @@ export function Calendar({
   return (
     <div className="calendar">
       <div className="cal-head">
-        <button className="icon-btn" onClick={() => shift(-1)} aria-label="Previous month">
+        <button className="icon-btn" onClick={() => shift(-1)} aria-label={t.calendar.prevMonth}>
           ‹
         </button>
         <button
@@ -44,14 +44,14 @@ export function Calendar({
             setMonth(new Date(d.getFullYear(), d.getMonth(), 1));
           }}
         >
-          {month.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}
+          {month.toLocaleDateString(localeFor(lang), { month: 'long', year: 'numeric' })}
         </button>
-        <button className="icon-btn" onClick={() => shift(1)} aria-label="Next month">
+        <button className="icon-btn" onClick={() => shift(1)} aria-label={t.calendar.nextMonth}>
           ›
         </button>
       </div>
       <div className="cal-grid">
-        {WEEKDAYS.map((w) => (
+        {t.calendar.weekdays.map((w) => (
           <div key={w} className="cal-wd">
             {w}
           </div>
@@ -78,16 +78,16 @@ export function Calendar({
       </div>
       <div className="legend">
         <span>
-          <i className="sw period" /> Period
+          <i className="sw period" /> {t.calendar.legendPeriod}
         </span>
         <span>
-          <i className="sw predicted" /> Predicted
+          <i className="sw predicted" /> {t.calendar.legendPredicted}
         </span>
         <span>
-          <i className="sw fertile" /> Fertile
+          <i className="sw fertile" /> {t.calendar.legendFertile}
         </span>
         <span>
-          <i className="sw ovulation" /> Ovulation
+          <i className="sw ovulation" /> {t.calendar.legendOvulation}
         </span>
       </div>
     </div>

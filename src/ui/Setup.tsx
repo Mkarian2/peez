@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react';
 import { biometricAvailable } from '../crypto/webauthn';
 import { enableBiometric, setup } from '../db/auth';
 import type { Vault } from '../db/vault';
-import { MIN_PIN, PinInput } from './common';
+import { useI18n } from '../i18n';
+import { LangToggle, MIN_PIN, PinInput } from './common';
 
 type Step = 'welcome' | 'pin' | 'recovery' | 'bio';
 
 export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
+  const { t } = useI18n();
   const [step, setStep] = useState<Step>('welcome');
   const [pin, setPin] = useState('');
   const [pin2, setPin2] = useState('');
@@ -23,8 +25,8 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
 
   async function createPin() {
     setError('');
-    if (pin.length < MIN_PIN) return setError(`Use at least ${MIN_PIN} digits (6+ recommended).`);
-    if (pin !== pin2) return setError('The two PINs do not match.');
+    if (pin.length < MIN_PIN) return setError(t.setup.pinTooShort(MIN_PIN));
+    if (pin !== pin2) return setError(t.setup.pinMismatch);
     setBusy(true);
     try {
       const r = await setup(pin);
@@ -54,69 +56,68 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
   return (
     <div className="center-screen">
       <div className="card setup">
+        <LangToggle />
         <div className="logo">💧</div>
         {step === 'welcome' && (
           <>
-            <h1>Welcome to Peez</h1>
-            <p>A private period tracker. Everything you log stays encrypted on your own devices — no account, no cloud.</p>
+            <h1>{t.setup.welcomeTitle}</h1>
+            <p>{t.setup.welcomeBody}</p>
             <div className="notice">
-              Predictions are estimates based on your history. <strong>Peez must not be used as contraception</strong>{' '}
-              and is not a medical device.
+              {t.setup.disclaimer1} <strong>{t.setup.disclaimerBold}</strong> {t.setup.disclaimer2}
             </div>
             <button className="btn primary block" onClick={() => setStep('pin')}>
-              Get started
+              {t.setup.getStarted}
             </button>
           </>
         )}
 
         {step === 'pin' && (
           <>
-            <h1>Choose a PIN</h1>
-            <p className="muted">Your PIN encrypts your data. 6 or more digits is recommended.</p>
+            <h1>{t.setup.choosePinTitle}</h1>
+            <p className="muted">{t.setup.choosePinSub}</p>
             <PinInput value={pin} onChange={setPin} autoFocus />
-            <PinInput value={pin2} onChange={setPin2} placeholder="Repeat PIN" />
+            <PinInput value={pin2} onChange={setPin2} placeholder={t.setup.repeatPin} />
             {error && <p className="error">{error}</p>}
             <button className="btn primary block" disabled={busy} onClick={createPin}>
-              {busy ? 'Setting up…' : 'Continue'}
+              {busy ? t.setup.settingUp : t.continueBtn}
             </button>
           </>
         )}
 
         {step === 'recovery' && (
           <>
-            <h1>Your recovery code</h1>
+            <h1>{t.setup.recoveryTitle}</h1>
             <p>
-              If you ever forget your PIN, this code is the <strong>only</strong> way to get your data back. Write it down
-              or save it in a password manager.
+              {t.setup.recoveryBody1} <strong>{t.setup.recoveryOnly}</strong> {t.setup.recoveryBody2}
             </p>
             <div className="code-box">{recovery}</div>
             <button className="btn ghost block" onClick={() => navigator.clipboard?.writeText(recovery)}>
-              Copy
+              {t.copy}
             </button>
             <label className="check">
-              <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> I saved my recovery
-              code
+              <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />{' '}
+              {t.setup.recoverySavedCheck}
             </label>
             <button
               className="btn primary block"
               disabled={!saved}
               onClick={() => (bioOk ? setStep('bio') : onDone(vault!))}
             >
-              Continue
+              {t.continueBtn}
             </button>
           </>
         )}
 
         {step === 'bio' && (
           <>
-            <h1>Unlock with fingerprint?</h1>
-            <p className="muted">You can always use your PIN as well. You can change this later in Settings.</p>
+            <h1>{t.setup.bioTitle}</h1>
+            <p className="muted">{t.setup.bioSub}</p>
             {error && <p className="error">{error}</p>}
             <button className="btn primary block" disabled={busy} onClick={addBio}>
-              {busy ? 'Waiting…' : 'Enable fingerprint / Windows Hello'}
+              {busy ? t.setup.waiting : t.setup.enableBio}
             </button>
             <button className="btn ghost block" onClick={() => onDone(vault!)}>
-              Not now
+              {t.setup.notNow}
             </button>
           </>
         )}

@@ -3,12 +3,14 @@ import { Bar } from 'react-chartjs-2';
 import { BarController, BarElement, CategoryScale, Chart, LinearScale, Tooltip } from 'chart.js';
 import { findCycles, findPeriods, predict } from '../domain/cycles';
 import { formatDate, todayISO } from '../domain/dates';
+import { translateTag, useI18n } from '../i18n';
 import { useApp } from './context';
 
 Chart.register(BarController, BarElement, CategoryScale, LinearScale, Tooltip);
 
 export function Stats() {
   const { vault, settings, version } = useApp();
+  const { lang, t } = useI18n();
   const entries = useMemo(() => vault.entries(), [vault, version]);
   const periods = useMemo(() => findPeriods(entries), [entries]);
   const cycles = useMemo(() => findCycles(periods), [periods]);
@@ -23,8 +25,8 @@ export function Stats() {
   if (!periods.length) {
     return (
       <div className="card">
-        <h2>Stats</h2>
-        <p className="muted">Log a few periods to see your statistics here.</p>
+        <h2>{t.stats.title}</h2>
+        <p className="muted">{t.stats.empty}</p>
       </div>
     );
   }
@@ -32,44 +34,59 @@ export function Stats() {
   const recent = cycles.slice(-12);
   const lens = cycles.map((c) => c.length);
   const maxCount = symptomCounts[0]?.[1] ?? 1;
+  const d = t.stats.dayUnit;
 
   return (
     <>
       <div className="stat-grid">
-        <Stat label="Avg. cycle" value={`${p.avgCycle} d`} />
-        <Stat label="Avg. period" value={`${p.avgPeriod} d`} />
-        <Stat label="Variation" value={lens.length >= 2 ? `±${p.range} d` : '—'} />
-        <Stat label="Periods logged" value={String(periods.length)} />
-        {lens.length > 0 && <Stat label="Shortest" value={`${Math.min(...lens)} d`} />}
-        {lens.length > 0 && <Stat label="Longest" value={`${Math.max(...lens)} d`} />}
+        <Stat label={t.stats.avgCycle} value={`${p.avgCycle} ${d}`} />
+        <Stat label={t.stats.avgPeriod} value={`${p.avgPeriod} ${d}`} />
+        <Stat label={t.stats.variation} value={lens.length >= 2 ? `±${p.range} ${d}` : '—'} />
+        <Stat label={t.stats.periodsLogged} value={String(periods.length)} />
+        {lens.length > 0 && <Stat label={t.stats.shortest} value={`${Math.min(...lens)} ${d}`} />}
+        {lens.length > 0 && <Stat label={t.stats.longest} value={`${Math.max(...lens)} ${d}`} />}
       </div>
 
       {recent.length > 0 && (
         <div className="card">
-          <h2>Cycle history</h2>
+          <h2>{t.stats.cycleHistory}</h2>
           <div className="chart">
             <Bar
               data={{
-                labels: recent.map((c) => formatDate(c.start)),
+                labels: recent.map((c) => formatDate(c.start, { day: 'numeric', month: 'short' }, lang)),
                 datasets: [
-                  { label: 'Cycle length', data: recent.map((c) => c.length), backgroundColor: '#f2a7bf', borderRadius: 6 },
-                  { label: 'Period length', data: recent.map((c) => c.periodLength), backgroundColor: '#c9b6e4', borderRadius: 6 },
+                  {
+                    label: t.stats.cycleLength,
+                    data: recent.map((c) => c.length),
+                    backgroundColor: '#f2a7bf',
+                    borderRadius: 6,
+                  },
+                  {
+                    label: t.stats.periodLength,
+                    data: recent.map((c) => c.periodLength),
+                    backgroundColor: '#c9b6e4',
+                    borderRadius: 6,
+                  },
                 ],
               }}
               options={{
                 responsive: true,
                 maintainAspectRatio: false,
                 scales: { y: { beginAtZero: true, ticks: { precision: 0 } }, x: { grid: { display: false } } },
-                plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} days` } } },
+                plugins: {
+                  tooltip: {
+                    callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y} ${t.stats.daysUnit}` },
+                  },
+                },
               }}
             />
           </div>
           <div className="legend">
             <span>
-              <i className="sw" style={{ background: '#f2a7bf' }} /> Cycle length
+              <i className="sw" style={{ background: '#f2a7bf' }} /> {t.stats.cycleLength}
             </span>
             <span>
-              <i className="sw" style={{ background: '#c9b6e4' }} /> Period length
+              <i className="sw" style={{ background: '#c9b6e4' }} /> {t.stats.periodLength}
             </span>
           </div>
         </div>
@@ -77,10 +94,10 @@ export function Stats() {
 
       {symptomCounts.length > 0 && (
         <div className="card">
-          <h2>Most frequent</h2>
+          <h2>{t.stats.mostFrequent}</h2>
           {symptomCounts.map(([name, n]) => (
             <div key={name} className="bar-row">
-              <span>{name}</span>
+              <span>{translateTag(lang, name)}</span>
               <div className="bar-track">
                 <div className="bar-fill" style={{ width: `${(n / maxCount) * 100}%` }} />
               </div>
@@ -91,13 +108,13 @@ export function Stats() {
       )}
 
       <div className="card">
-        <h2>Periods</h2>
+        <h2>{t.stats.periodsTable}</h2>
         <table className="table">
           <thead>
             <tr>
-              <th>Start</th>
-              <th>Length</th>
-              <th>Cycle</th>
+              <th>{t.stats.colStart}</th>
+              <th>{t.stats.colLength}</th>
+              <th>{t.stats.colCycle}</th>
             </tr>
           </thead>
           <tbody>
@@ -105,9 +122,11 @@ export function Stats() {
               const c = cycles.find((x) => x.start === per.start);
               return (
                 <tr key={per.start}>
-                  <td>{formatDate(per.start, { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                  <td>{per.length} d</td>
-                  <td>{c ? `${c.length} d` : <span className="muted">current</span>}</td>
+                  <td>{formatDate(per.start, { day: 'numeric', month: 'short', year: 'numeric' }, lang)}</td>
+                  <td>
+                    {per.length} {d}
+                  </td>
+                  <td>{c ? `${c.length} ${d}` : <span className="muted">{t.stats.current}</span>}</td>
                 </tr>
               );
             })}

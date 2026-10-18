@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { hasBiometric, unlockWithBiometric, unlockWithPin, unlockWithRecovery } from '../db/auth';
 import type { Vault } from '../db/vault';
-import { MIN_PIN, PinInput } from './common';
+import { useI18n } from '../i18n';
+import { LangToggle, MIN_PIN, PinInput } from './common';
 
 export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
+  const { t } = useI18n();
   const [pin, setPin] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -36,12 +38,12 @@ export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
           className="card setup"
           onSubmit={(e) => {
             e.preventDefault();
-            if (newPin.length < MIN_PIN) return setError(`New PIN must have at least ${MIN_PIN} digits.`);
+            if (newPin.length < MIN_PIN) return setError(t.lockScreen.newPinShort(MIN_PIN));
             attempt(() => unlockWithRecovery(code, newPin));
           }}
         >
-          <h1>Reset PIN</h1>
-          <p className="muted">Enter the recovery code you saved when setting up Peez, then choose a new PIN.</p>
+          <h1>{t.lockScreen.resetTitle}</h1>
+          <p className="muted">{t.lockScreen.resetSub}</p>
           <input
             className="text-input"
             placeholder="XXXX-XXXX-XXXX-XXXX-XXXX"
@@ -50,13 +52,13 @@ export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
             autoCapitalize="characters"
             autoComplete="off"
           />
-          <PinInput value={newPin} onChange={setNewPin} placeholder="New PIN" />
+          <PinInput value={newPin} onChange={setNewPin} placeholder={t.lockScreen.newPinPlaceholder} />
           {error && <p className="error">{error}</p>}
           <button className="btn primary block" disabled={busy}>
-            {busy ? 'Checking…' : 'Reset PIN & unlock'}
+            {busy ? t.lockScreen.checking : t.lockScreen.resetAndUnlock}
           </button>
           <button type="button" className="btn ghost block" onClick={() => setRecoveryMode(false)}>
-            Back
+            {t.back}
           </button>
         </form>
       </div>
@@ -72,20 +74,21 @@ export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
           if (pin) attempt(() => unlockWithPin(pin));
         }}
       >
+        <LangToggle />
         <div className="logo">💧</div>
-        <h1>Peez is locked</h1>
+        <h1>{t.lockScreen.lockedTitle}</h1>
         <PinInput value={pin} onChange={setPin} autoFocus />
         {error && <p className="error">{error}</p>}
         <button className="btn primary block" disabled={busy || !pin}>
-          {busy ? 'Unlocking…' : 'Unlock'}
+          {busy ? t.lockScreen.unlocking : t.lockScreen.unlock}
         </button>
         {bio && (
           <button type="button" className="btn ghost block" disabled={busy} onClick={() => attempt(unlockWithBiometric)}>
-            👆 Use fingerprint / Windows Hello
+            {t.lockScreen.useBio}
           </button>
         )}
         <button type="button" className="link-btn" onClick={() => setRecoveryMode(true)}>
-          Forgot PIN?
+          {t.lockScreen.forgotPin}
         </button>
       </form>
     </div>

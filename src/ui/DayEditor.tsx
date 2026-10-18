@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { formatLong, todayISO } from '../domain/dates';
 import { emptyEntry, FLOWS, isEntryEmpty, MOODS, SYMPTOMS, type DayEntry } from '../domain/types';
+import { FLOW_LABELS, translateTag, useI18n } from '../i18n';
 import { Chip, Modal } from './common';
 import { useApp } from './context';
 
@@ -11,6 +12,7 @@ function toggle(list: string[], v: string): string[] {
 /** Keyed by date by the parent, so state initialises once per opened day. */
 export function DayEditor({ date, onClose }: { date: string | null; onClose: () => void }) {
   const { vault, refresh, toast } = useApp();
+  const { lang, t } = useI18n();
   const [entry, setEntry] = useState<DayEntry>(() =>
     structuredClone(date ? (vault.entry(date) ?? emptyEntry(date)) : emptyEntry(todayISO())),
   );
@@ -43,12 +45,12 @@ export function DayEditor({ date, onClose }: { date: string | null; onClose: () 
   }
 
   return (
-    <Modal open={!!date} onClose={onClose} title={formatLong(date)}>
-      {future && <p className="muted small">This day is in the future — you can still add notes.</p>}
+    <Modal open={!!date} onClose={onClose} title={formatLong(date, lang)}>
+      {future && <p className="muted small">{t.editor.futureNotice}</p>}
 
       <section>
         <label className="switch-row">
-          <span>Period</span>
+          <span>{t.editor.period}</span>
           <input
             type="checkbox"
             className="switch"
@@ -62,7 +64,7 @@ export function DayEditor({ date, onClose }: { date: string | null; onClose: () 
           <div className="chips">
             {FLOWS.map((f) => (
               <Chip key={f.value} on={entry.flow === f.value} onClick={() => setEntry({ ...entry, flow: f.value })}>
-                {f.label}
+                {FLOW_LABELS[lang][f.value]}
               </Chip>
             ))}
           </div>
@@ -70,33 +72,41 @@ export function DayEditor({ date, onClose }: { date: string | null; onClose: () 
       </section>
 
       <section>
-        <h3>Symptoms</h3>
+        <h3>{t.editor.symptoms}</h3>
         <div className="chips">
           {SYMPTOMS.map((s) => (
-            <Chip key={s} on={entry.symptoms.includes(s)} onClick={() => setEntry({ ...entry, symptoms: toggle(entry.symptoms, s) })}>
-              {s}
+            <Chip
+              key={s}
+              on={entry.symptoms.includes(s)}
+              onClick={() => setEntry({ ...entry, symptoms: toggle(entry.symptoms, s) })}
+            >
+              {translateTag(lang, s)}
             </Chip>
           ))}
         </div>
       </section>
 
       <section>
-        <h3>Mood</h3>
+        <h3>{t.editor.mood}</h3>
         <div className="chips">
           {MOODS.map((m) => (
-            <Chip key={m} on={entry.moods.includes(m)} onClick={() => setEntry({ ...entry, moods: toggle(entry.moods, m) })}>
-              {m}
+            <Chip
+              key={m}
+              on={entry.moods.includes(m)}
+              onClick={() => setEntry({ ...entry, moods: toggle(entry.moods, m) })}
+            >
+              {translateTag(lang, m)}
             </Chip>
           ))}
         </div>
       </section>
 
       <section>
-        <h3>Notes</h3>
+        <h3>{t.editor.notes}</h3>
         <textarea
           className="text-input"
           rows={3}
-          placeholder="Anything else…"
+          placeholder={t.editor.notesPlaceholder}
           value={entry.note}
           onChange={(e) => setEntry({ ...entry, note: e.target.value })}
         />
@@ -105,11 +115,11 @@ export function DayEditor({ date, onClose }: { date: string | null; onClose: () 
       <div className="row end">
         {existing && (
           <button className="btn danger ghost" onClick={remove}>
-            Clear day
+            {t.editor.clearDay}
           </button>
         )}
         <button className="btn primary" disabled={busy} onClick={save}>
-          Save
+          {t.save}
         </button>
       </div>
     </Modal>

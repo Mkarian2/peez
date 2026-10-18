@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
+import { localeFor, useI18n } from '../i18n';
 import {
   loadPairing,
   newPairing,
@@ -16,6 +17,7 @@ type Mode = 'idle' | 'show' | 'scan';
 
 export function SyncPanel() {
   const { vault, refresh, toast } = useApp();
+  const { lang, t } = useI18n();
   const [pairing, setPairing] = useState<Pairing | undefined>();
   const [lastSync, setLastSync] = useState<number | undefined>();
   const [mode, setMode] = useState<Mode>('idle');
@@ -46,16 +48,16 @@ export function SyncPanel() {
     async (text: string) => {
       const p = parsePairingCode(text);
       if (!p) {
-        toast('That is not a valid Peez pairing code.');
+        toast(t.sync.invalidCode);
         return;
       }
       await savePairing(vault, p);
       setPairing(p);
       setMode('idle');
       setPaste('');
-      toast('Paired! Now tap "Sync now" on both devices.');
+      toast(t.sync.pairedToast);
     },
-    [vault, toast],
+    [vault, toast, t.sync.invalidCode, t.sync.pairedToast],
   );
 
   async function syncNow() {
@@ -63,13 +65,13 @@ export function SyncPanel() {
     const ac = new AbortController();
     abortRef.current = ac;
     setSyncing(true);
-    setStatus('Starting…');
+    setStatus(t.sync.starting);
     try {
       const r = await runSync(vault, pairing, setStatus, ac.signal);
       const now = Date.now();
       await vault.setSecret('lastSync', now);
       setLastSync(now);
-      setStatus(`Synced ✓ — ${r.applied} change${r.applied === 1 ? '' : 's'} received.`);
+      setStatus(t.sync.syncedStatus(r.applied));
       refresh();
     } catch (e) {
       setStatus((e as Error).message);
@@ -80,7 +82,7 @@ export function SyncPanel() {
   }
 
   async function unpair() {
-    if (!confirm('Unpair this device? You will need to scan a new pairing code to sync again.')) return;
+    if (!confirm(t.sync.unpairConfirm)) return;
     await savePairing(vault, null);
     setPairing(undefined);
     setStatus('');
@@ -90,20 +92,21 @@ export function SyncPanel() {
     return (
       <div className="stack">
         <p>
-          On the <strong>other device</strong>, open Peez → Settings → Sync → <em>Scan pairing code</em>, and point it at
-          this code:
+          {t.sync.scanInstructions1} <strong>{t.sync.otherDevice}</strong>
+          {t.sync.scanInstructions2} <em>{t.sync.scanPairingCode}</em>
+          {t.sync.scanInstructions3}
         </p>
-        <img className="qr" src={qr} alt="Pairing QR code" />
+        <img className="qr" src={qr} alt={t.sync.qrAlt} />
         <details>
-          <summary className="muted small">Can't scan? Copy the code as text</summary>
+          <summary className="muted small">{t.sync.cantScan}</summary>
           <div className="code-box small-code">{code}</div>
           <button className="btn ghost" onClick={() => navigator.clipboard?.writeText(code)}>
-            Copy code
+            {t.sync.copyCode}
           </button>
         </details>
-        <p className="muted small">Keep this code private — anyone with it could sync with your data.</p>
+        <p className="muted small">{t.sync.keepPrivate}</p>
         <button className="btn primary block" onClick={() => setMode('idle')}>
-          Done
+          {t.done}
         </button>
       </div>
     );
@@ -116,55 +119,55 @@ export function SyncPanel() {
         <div className="row">
           <input
             className="text-input"
-            placeholder="…or paste the code (PEEZ1:…)"
+            placeholder={t.sync.pastePlaceholder}
             value={paste}
             onChange={(e) => setPaste(e.target.value)}
           />
           <button className="btn primary" disabled={!paste} onClick={() => acceptCode(paste)}>
-            Pair
+            {t.sync.pairBtn}
           </button>
         </div>
         <button className="btn ghost block" onClick={() => setMode('idle')}>
-          Cancel
+          {t.cancel}
         </button>
       </div>
     );
   }
+
+  const loc = localeFor(lang);
 
   return (
     <div className="stack">
       {pairing ? (
         <>
           <p className="muted small">
-            Paired {new Date(pairing.pairedAt).toLocaleDateString('en-GB')}
-            {lastSync ? ` · last synced ${new Date(lastSync).toLocaleString('en-GB')}` : ' · never synced'}
+            {t.sync.pairedOn(new Date(pairing.pairedAt).toLocaleDateString(loc))}
+            {lastSync ? t.sync.lastSynced(new Date(lastSync).toLocaleString(loc)) : t.sync.neverSynced}
           </p>
-          <p className="muted small">Open Peez on both devices and tap "Sync now" on each (within 2 minutes).</p>
+          <p className="muted small">{t.sync.syncInstructions}</p>
           {syncing ? (
             <button className="btn ghost block" onClick={() => abortRef.current?.abort()}>
-              Cancel
+              {t.cancel}
             </button>
           ) : (
             <button className="btn primary block" onClick={syncNow}>
-              🔄 Sync now
+              {t.sync.syncNow}
             </button>
           )}
           {status && <p className="status">{status}</p>}
           <button className="link-btn" onClick={unpair} disabled={syncing}>
-            Unpair this device
+            {t.sync.unpairDevice}
           </button>
         </>
       ) : (
         <>
-          <p className="muted small">
-            Pair this device with her other device once. Pick one to show the code, and scan it with the other.
-          </p>
+          <p className="muted small">{t.sync.notPairedInfo}</p>
           <div className="row">
             <button className="btn primary" onClick={showCode}>
-              Show pairing code
+              {t.sync.showPairingCode}
             </button>
             <button className="btn ghost" onClick={() => setMode('scan')}>
-              Scan pairing code
+              {t.sync.scanPairingCode}
             </button>
           </div>
         </>

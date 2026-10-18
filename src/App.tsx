@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { isSetUp } from './db/auth';
 import type { Vault } from './db/vault';
 import type { Settings as SettingsT } from './domain/types';
+import { getInitialLang, I18nContext, saveLang, STRINGS, useI18n, type Lang } from './i18n';
+import { LangToggle } from './ui/common';
 import { AppContext, type AppContextValue } from './ui/context';
 import { Home } from './ui/Home';
 import { Lock } from './ui/Lock';
@@ -13,9 +15,17 @@ type Phase = 'loading' | 'setup' | 'locked' | 'unlocked';
 type Tab = 'home' | 'stats' | 'settings';
 
 export function App() {
+  const [lang, setLangState] = useState<Lang>(getInitialLang);
   const [phase, setPhase] = useState<Phase>('loading');
   const [vault, setVault] = useState<Vault | null>(null);
   const [settings, setSettings] = useState<SettingsT | null>(null);
+
+  const setLang = useCallback((l: Lang) => {
+    setLangState(l);
+    saveLang(l);
+  }, []);
+
+  const i18n = useMemo(() => ({ lang, setLang, t: STRINGS[lang] }), [lang, setLang]);
 
   useEffect(() => {
     isSetUp().then((ok) => setPhase(ok ? 'locked' : 'setup'));
@@ -33,10 +43,19 @@ export function App() {
     setPhase('locked');
   }, []);
 
-  if (phase === 'loading') return <div className="center-screen muted">Loading…</div>;
-  if (phase === 'setup') return <Setup onDone={onUnlock} />;
-  if (phase === 'locked' || !vault || !settings) return <Lock onUnlock={onUnlock} />;
-  return <Unlocked vault={vault} settings={settings} setSettings={setSettings} lock={lock} />;
+  return (
+    <I18nContext.Provider value={i18n}>
+      {phase === 'loading' ? (
+        <div className="center-screen muted">{i18n.t.loading}</div>
+      ) : phase === 'setup' ? (
+        <Setup onDone={onUnlock} />
+      ) : phase === 'locked' || !vault || !settings ? (
+        <Lock onUnlock={onUnlock} />
+      ) : (
+        <Unlocked vault={vault} settings={settings} setSettings={setSettings} lock={lock} />
+      )}
+    </I18nContext.Provider>
+  );
 }
 
 function Unlocked({
@@ -50,6 +69,7 @@ function Unlocked({
   setSettings: (s: SettingsT) => void;
   lock: () => void;
 }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('home');
   const [version, setVersion] = useState(0);
   const [toastMsg, setToastMsg] = useState('');
@@ -91,9 +111,12 @@ function Unlocked({
       <div className="app">
         <header className="header">
           <span className="brand">💧 Peez</span>
-          <button className="icon-btn" onClick={lock} aria-label="Lock">
-            🔒
-          </button>
+          <div className="row">
+            <LangToggle />
+            <button className="icon-btn" onClick={lock} aria-label={t.lock}>
+              🔒
+            </button>
+          </div>
         </header>
         <main className="content">
           {tab === 'home' && <Home />}
@@ -101,9 +124,9 @@ function Unlocked({
           {tab === 'settings' && <Settings />}
         </main>
         <nav className="tabbar">
-          <TabButton icon="📅" label="Calendar" active={tab === 'home'} onClick={() => setTab('home')} />
-          <TabButton icon="📈" label="Stats" active={tab === 'stats'} onClick={() => setTab('stats')} />
-          <TabButton icon="⚙️" label="Settings" active={tab === 'settings'} onClick={() => setTab('settings')} />
+          <TabButton icon="📅" label={t.tabs.calendar} active={tab === 'home'} onClick={() => setTab('home')} />
+          <TabButton icon="📈" label={t.tabs.stats} active={tab === 'stats'} onClick={() => setTab('stats')} />
+          <TabButton icon="⚙️" label={t.tabs.settings} active={tab === 'settings'} onClick={() => setTab('settings')} />
         </nav>
         {toastMsg && <div className="toast">{toastMsg}</div>}
       </div>

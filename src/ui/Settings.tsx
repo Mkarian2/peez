@@ -1,14 +1,23 @@
 import { useEffect, useState } from 'react';
 import { biometricAvailable } from '../crypto/webauthn';
-import { changePin, disableBiometric, enableBiometric, hasBiometric, regenerateRecoveryCode, wipeEverything } from '../db/auth';
+import {
+  changePin,
+  disableBiometric,
+  enableBiometric,
+  hasBiometric,
+  regenerateRecoveryCode,
+  wipeEverything,
+} from '../db/auth';
 import type { Settings as SettingsT } from '../domain/types';
 import { exportBackup, exportCsv, exportPdf, importBackup } from '../export/export';
-import { MIN_PIN, Modal, PinInput } from './common';
+import { useI18n } from '../i18n';
+import { LangToggle, MIN_PIN, Modal, PinInput } from './common';
 import { useApp } from './context';
 import { SyncPanel } from './SyncPanel';
 
 export function Settings() {
   const { vault, settings, updateSettings, refresh, toast, lock } = useApp();
+  const { lang, t } = useI18n();
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioOn, setBioOn] = useState(false);
   const [modal, setModal] = useState<null | 'pin' | 'recovery' | 'backup' | 'restore' | 'wipe'>(null);
@@ -26,7 +35,7 @@ export function Settings() {
       } else {
         await enableBiometric(vault);
         setBioOn(true);
-        toast('Fingerprint unlock enabled');
+        toast(t.settings.fingerprintEnabledToast);
       }
     } catch (e) {
       toast((e as Error).message);
@@ -38,49 +47,56 @@ export function Settings() {
   return (
     <>
       <div className="card">
-        <h2>Sync between devices</h2>
+        <div className="list-item" style={{ borderBottom: 'none', padding: 0 }}>
+          <h2 style={{ margin: 0 }}>{t.settings.languageSection}</h2>
+          <LangToggle />
+        </div>
+      </div>
+
+      <div className="card">
+        <h2>{t.settings.syncSection}</h2>
         <SyncPanel />
       </div>
 
       <div className="card">
-        <h2>Security</h2>
+        <h2>{t.settings.securitySection}</h2>
         <div className="list">
           <button className="list-item" onClick={() => setModal('pin')}>
-            Change PIN <span>›</span>
+            {t.settings.changePin} <span>›</span>
           </button>
           {bioAvailable && (
             <label className="list-item">
-              Fingerprint / Windows Hello
+              {t.settings.fingerprint}
               <input type="checkbox" className="switch" checked={bioOn} onChange={toggleBio} />
             </label>
           )}
           <button className="list-item" onClick={() => setModal('recovery')}>
-            New recovery code <span>›</span>
+            {t.settings.newRecoveryCode} <span>›</span>
           </button>
           <label className="list-item">
-            Auto-lock
+            {t.settings.autoLock}
             <select
               value={settings.lockAfterSeconds}
               onChange={(e) => setNum('lockAfterSeconds', Number(e.target.value))}
             >
-              <option value={0}>Immediately</option>
-              <option value={60}>After 1 minute</option>
-              <option value={300}>After 5 minutes</option>
-              <option value={900}>After 15 minutes</option>
+              <option value={0}>{t.settings.lockImmediately}</option>
+              <option value={60}>{t.settings.lock1m}</option>
+              <option value={300}>{t.settings.lock5m}</option>
+              <option value={900}>{t.settings.lock15m}</option>
             </select>
           </label>
           <button className="list-item" onClick={lock}>
-            Lock now <span>🔒</span>
+            {t.settings.lockNow} <span>🔒</span>
           </button>
         </div>
       </div>
 
       <div className="card">
-        <h2>Cycle defaults</h2>
-        <p className="muted small">Used until enough cycles are logged to compute your own averages.</p>
+        <h2>{t.settings.defaultsSection}</h2>
+        <p className="muted small">{t.settings.defaultsSub}</p>
         <div className="list">
           <label className="list-item">
-            Cycle length (days)
+            {t.settings.cycleLengthDays}
             <input
               type="number"
               min={15}
@@ -90,7 +106,7 @@ export function Settings() {
             />
           </label>
           <label className="list-item">
-            Period length (days)
+            {t.settings.periodLengthDays}
             <input
               type="number"
               min={1}
@@ -103,32 +119,29 @@ export function Settings() {
       </div>
 
       <div className="card">
-        <h2>Your data</h2>
+        <h2>{t.settings.dataSection}</h2>
         <div className="list">
-          <button className="list-item" onClick={() => exportPdf(vault.entries(), settings)}>
-            Export PDF summary (for a doctor) <span>📄</span>
+          <button className="list-item" onClick={() => exportPdf(vault.entries(), settings, lang)}>
+            {t.settings.exportPdf} <span>📄</span>
           </button>
           <button className="list-item" onClick={() => exportCsv(vault.entries())}>
-            Export CSV spreadsheet <span>📊</span>
+            {t.settings.exportCsv} <span>📊</span>
           </button>
           <button className="list-item" onClick={() => setModal('backup')}>
-            Create encrypted backup <span>💾</span>
+            {t.settings.createBackup} <span>💾</span>
           </button>
           <button className="list-item" onClick={() => setModal('restore')}>
-            Restore / merge a backup <span>📥</span>
+            {t.settings.restoreBackup} <span>📥</span>
           </button>
           <button className="list-item danger" onClick={() => setModal('wipe')}>
-            Delete all data on this device <span>🗑️</span>
+            {t.settings.deleteAllData} <span>🗑️</span>
           </button>
         </div>
       </div>
 
       <div className="card">
-        <h2>About</h2>
-        <p className="muted small">
-          Peez stores everything encrypted on this device only. Predictions are estimates and must not be used as
-          contraception or medical advice.
-        </p>
+        <h2>{t.settings.aboutSection}</h2>
+        <p className="muted small">{t.settings.aboutText}</p>
       </div>
 
       <ChangePinModal open={modal === 'pin'} onClose={() => setModal(null)} />
@@ -142,33 +155,34 @@ export function Settings() {
 
 function ChangePinModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { vault, toast } = useApp();
+  const { t } = useI18n();
   const [a, setA] = useState('');
   const [b, setB] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   return (
-    <Modal open={open} onClose={onClose} title="Change PIN">
+    <Modal open={open} onClose={onClose} title={t.settings.changePin}>
       <form
         className="stack"
         onSubmit={async (e) => {
           e.preventDefault();
-          if (a.length < MIN_PIN) return setErr(`Use at least ${MIN_PIN} digits.`);
-          if (a !== b) return setErr('PINs do not match.');
+          if (a.length < MIN_PIN) return setErr(t.setup.pinTooShort(MIN_PIN));
+          if (a !== b) return setErr(t.setup.pinMismatch);
           setBusy(true);
           await changePin(vault, a);
           setBusy(false);
           setA('');
           setB('');
           setErr('');
-          toast('PIN changed');
+          toast(t.settings.pinChangedToast);
           onClose();
         }}
       >
-        <PinInput value={a} onChange={setA} placeholder="New PIN" />
-        <PinInput value={b} onChange={setB} placeholder="Repeat new PIN" />
+        <PinInput value={a} onChange={setA} placeholder={t.settings.newPinPlaceholder} />
+        <PinInput value={b} onChange={setB} placeholder={t.settings.repeatNewPinPlaceholder} />
         {err && <p className="error">{err}</p>}
         <button className="btn primary block" disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}
+          {busy ? t.saving : t.save}
         </button>
       </form>
     </Modal>
@@ -177,6 +191,7 @@ function ChangePinModal({ open, onClose }: { open: boolean; onClose: () => void 
 
 function RecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { vault } = useApp();
+  const { t } = useI18n();
   const [code, setCode] = useState('');
   return (
     <Modal
@@ -185,21 +200,21 @@ function RecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }
         setCode('');
         onClose();
       }}
-      title="Recovery code"
+      title={t.settings.recoveryModalTitle}
     >
       {code ? (
         <div className="stack">
-          <p>Your new recovery code (the old one no longer works):</p>
+          <p>{t.settings.newRecoveryInfo}</p>
           <div className="code-box">{code}</div>
           <button className="btn ghost block" onClick={() => navigator.clipboard?.writeText(code)}>
-            Copy
+            {t.copy}
           </button>
         </div>
       ) : (
         <div className="stack">
-          <p className="muted">This creates a new recovery code and invalidates the previous one.</p>
+          <p className="muted">{t.settings.generateRecoveryWarn}</p>
           <button className="btn primary block" onClick={async () => setCode(await regenerateRecoveryCode(vault))}>
-            Generate new code
+            {t.settings.generateRecoveryBtn}
           </button>
         </div>
       )}
@@ -209,10 +224,11 @@ function RecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }
 
 function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { vault, toast } = useApp();
+  const { t } = useI18n();
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState(false);
   return (
-    <Modal open={open} onClose={onClose} title="Encrypted backup">
+    <Modal open={open} onClose={onClose} title={t.settings.backupModalTitle}>
       <form
         className="stack"
         onSubmit={async (e) => {
@@ -221,23 +237,20 @@ function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           await exportBackup(vault, pw);
           setBusy(false);
           setPw('');
-          toast('Backup downloaded');
+          toast(t.settings.backupDownloadedToast);
           onClose();
         }}
       >
-        <p className="muted small">
-          Choose a password for this backup file. You'll need it to restore. The file can also be used to move data to
-          another device if sync isn't available.
-        </p>
+        <p className="muted small">{t.settings.backupModalInfo}</p>
         <input
           className="text-input"
           type="password"
-          placeholder="Backup password"
+          placeholder={t.settings.backupPwPlaceholder}
           value={pw}
           onChange={(e) => setPw(e.target.value)}
         />
         <button className="btn primary block" disabled={busy || pw.length < 4}>
-          {busy ? 'Encrypting…' : 'Download backup'}
+          {busy ? t.settings.encrypting : t.settings.downloadBackup}
         </button>
       </form>
     </Modal>
@@ -246,12 +259,13 @@ function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) 
 
 function RestoreModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { vault, toast } = useApp();
+  const { t } = useI18n();
   const [file, setFile] = useState<File | null>(null);
   const [pw, setPw] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   return (
-    <Modal open={open} onClose={onClose} title="Restore a backup">
+    <Modal open={open} onClose={onClose} title={t.settings.restoreModalTitle}>
       <form
         className="stack"
         onSubmit={async (e) => {
@@ -262,7 +276,7 @@ function RestoreModal({ open, onClose, onDone }: { open: boolean; onClose: () =>
           try {
             const n = await importBackup(vault, file, pw);
             onDone();
-            toast(`Backup merged — ${n} change${n === 1 ? '' : 's'} applied`);
+            toast(t.settings.backupMergedToast(n));
             setPw('');
             setFile(null);
             onClose();
@@ -273,18 +287,22 @@ function RestoreModal({ open, onClose, onDone }: { open: boolean; onClose: () =>
           }
         }}
       >
-        <p className="muted small">The backup is merged with existing data: the most recent version of each day wins.</p>
-        <input type="file" accept=".peez,application/octet-stream,application/json" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+        <p className="muted small">{t.settings.restoreModalInfo}</p>
+        <input
+          type="file"
+          accept=".peez,application/octet-stream,application/json"
+          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+        />
         <input
           className="text-input"
           type="password"
-          placeholder="Backup password"
+          placeholder={t.settings.backupPwPlaceholder}
           value={pw}
           onChange={(e) => setPw(e.target.value)}
         />
         {err && <p className="error">{err}</p>}
         <button className="btn primary block" disabled={busy || !file || !pw}>
-          {busy ? 'Restoring…' : 'Restore'}
+          {busy ? t.settings.restoring : t.settings.restoreBtn}
         </button>
       </form>
     </Modal>
@@ -292,15 +310,21 @@ function RestoreModal({ open, onClose, onDone }: { open: boolean; onClose: () =>
 }
 
 function WipeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useI18n();
   const [text, setText] = useState('');
   return (
-    <Modal open={open} onClose={onClose} title="Delete all data">
+    <Modal open={open} onClose={onClose} title={t.settings.wipeModalTitle}>
       <div className="stack">
         <p>
-          This permanently deletes every entry, your PIN and pairing <strong>on this device</strong>. Other synced
-          devices keep their copy.
+          {t.settings.wipeModalInfo1} <strong>{t.settings.wipeModalBold}</strong>
+          {t.settings.wipeModalInfo2}
         </p>
-        <input className="text-input" placeholder='Type "DELETE" to confirm' value={text} onChange={(e) => setText(e.target.value)} />
+        <input
+          className="text-input"
+          placeholder={t.settings.wipeConfirmPlaceholder}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+        />
         <button
           className="btn danger block"
           disabled={text !== 'DELETE'}
@@ -309,7 +333,7 @@ function WipeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
             location.reload();
           }}
         >
-          Delete everything
+          {t.settings.deleteEverything}
         </button>
       </div>
     </Modal>
