@@ -61,6 +61,28 @@ If you want to transfer data without internet access, go to **Settings → Your 
 
 ---
 
+## Troubleshooting
+
+Peez stores everything locally in your browser, so it needs permission to save **cookies and site data** for `https://mkarian2.github.io`. On computers (Windows / macOS / Linux), privacy settings or cleanup tools sometimes block or delete this data, which causes:
+
+- **You have to create a new PIN every time you open Peez** → the browser deletes site data when it closes.
+- **Peez is stuck on "Loading…"** or shows **"Peez cannot store data"** → the browser blocks site data for this site.
+
+**Fix:** allow cookies and site data for this site specifically.
+
+1. Open [**https://mkarian2.github.io/peez/**](https://mkarian2.github.io/peez/) in a normal browser tab.
+2. Click the icon to the left of the address bar → **Site settings** (Chrome) / **Permissions for this site** (Edge).
+3. Set **Cookies and site data** to **Allow**.
+4. Also make sure the site isn't deleted when the browser closes:
+   - **Chrome:** `chrome://settings/content/siteData` → add `https://mkarian2.github.io` under **Allowed to save data on your device**.
+   - **Edge:** `edge://settings/content/cookies` → add `https://mkarian2.github.io` under **Allow**.
+5. Close and reopen Peez (reinstall it if it still doesn't start).
+
+> [!NOTE]
+> If site data was deleted, your entries on that device are gone. Restore them by syncing from another device or from an encrypted backup (`.peez` file).
+
+---
+
 ## Local Development
 
 ```bash

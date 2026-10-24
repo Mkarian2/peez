@@ -62,6 +62,28 @@ Pour transférer vos données sans connexion Internet, allez dans **Réglages �
 
 ---
 
+## Dépannage
+
+Peez enregistre tout localement dans votre navigateur : il a donc besoin de l’autorisation d’enregistrer des **cookies et données de site** pour `https://mkarian2.github.io`. Sur ordinateur (Windows / macOS / Linux), certains réglages de confidentialité ou outils de nettoyage bloquent ou suppriment ces données, ce qui provoque :
+
+- **Vous devez créer un nouveau code PIN à chaque ouverture de Peez** → le navigateur efface les données de site à sa fermeture.
+- **Peez reste bloqué sur « Chargement… »** ou affiche **« Peez ne peut pas enregistrer de données »** → le navigateur bloque les données de site pour ce site.
+
+**Solution :** autorisez les cookies et données de site pour ce site en particulier.
+
+1. Ouvrez [**https://mkarian2.github.io/peez/**](https://mkarian2.github.io/peez/) dans un onglet normal du navigateur.
+2. Cliquez sur l’icône à gauche de la barre d’adresse → **Paramètres des sites** (Chrome) / **Autorisations pour ce site** (Edge).
+3. Réglez **Cookies et données de site** sur **Autoriser**.
+4. Vérifiez aussi que le site n’est pas effacé à la fermeture du navigateur :
+   - **Chrome :** `chrome://settings/content/siteData` → ajoutez `https://mkarian2.github.io` dans **Autorisés à enregistrer des données sur votre appareil**.
+   - **Edge :** `edge://settings/content/cookies` → ajoutez `https://mkarian2.github.io` dans **Autoriser**.
+5. Fermez puis rouvrez Peez (réinstallez-le s’il ne démarre toujours pas).
+
+> [!NOTE]
+> Si les données de site ont été effacées, vos saisies sur cet appareil sont perdues. Récupérez-les en synchronisant depuis un autre appareil ou à partir d’une sauvegarde chiffrée (fichier `.peez`).
+
+---
+
 ## Développement local
 
 ```bash
