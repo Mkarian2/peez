@@ -106,6 +106,9 @@ export function translateTag(lang: Lang, tag: string): string {
 export const STRINGS = {
   en: {
     loading: 'Loading…',
+    storageErrorTitle: 'Peez cannot store data',
+    storageErrorBody:
+      'Your browser is blocking this site from saving data, so Peez cannot work. Allow cookies and site data for this site in your browser settings (and make sure it is not cleared when the browser closes), then reopen Peez.',
     close: 'Close',
     cancel: 'Cancel',
     save: 'Save',
@@ -313,6 +316,9 @@ export const STRINGS = {
   },
   fr: {
     loading: 'Chargement…',
+    storageErrorTitle: 'Peez ne peut pas enregistrer de données',
+    storageErrorBody:
+      'Votre navigateur empêche ce site d’enregistrer des données, Peez ne peut donc pas fonctionner. Autorisez les cookies et données de site pour ce site dans les paramètres du navigateur (et vérifiez qu’ils ne sont pas effacés à la fermeture), puis rouvrez Peez.',
     close: 'Fermer',
     cancel: 'Annuler',
     save: 'Enregistrer',

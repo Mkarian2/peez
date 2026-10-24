@@ -11,7 +11,7 @@ import { Settings } from './ui/Settings';
 import { Setup } from './ui/Setup';
 import { Stats } from './ui/Stats';
 
-type Phase = 'loading' | 'setup' | 'locked' | 'unlocked';
+type Phase = 'loading' | 'setup' | 'locked' | 'unlocked' | 'storageError';
 type Tab = 'home' | 'stats' | 'settings';
 
 export function App() {
@@ -28,7 +28,14 @@ export function App() {
   const i18n = useMemo(() => ({ lang, setLang, t: STRINGS[lang] }), [lang, setLang]);
 
   useEffect(() => {
-    isSetUp().then((ok) => setPhase(ok ? 'locked' : 'setup'));
+    isSetUp().then(
+      (ok) => setPhase(ok ? 'locked' : 'setup'),
+      // IndexedDB can't be opened (e.g. site data blocked by browser settings).
+      (e) => {
+        console.error('Peez: cannot open local database', e);
+        setPhase('storageError');
+      },
+    );
   }, []);
 
   async function onUnlock(v: Vault) {
@@ -47,6 +54,14 @@ export function App() {
     <I18nContext.Provider value={i18n}>
       {phase === 'loading' ? (
         <div className="center-screen muted">{i18n.t.loading}</div>
+      ) : phase === 'storageError' ? (
+        <div className="center-screen">
+          <div className="card setup">
+            <div className="logo">⚠️</div>
+            <h1>{i18n.t.storageErrorTitle}</h1>
+            <p>{i18n.t.storageErrorBody}</p>
+          </div>
+        </div>
       ) : phase === 'setup' ? (
         <Setup onDone={onUnlock} />
       ) : phase === 'locked' || !vault || !settings ? (
