@@ -4,6 +4,7 @@ import { enableBiometric, setup } from '../db/auth';
 import type { Vault } from '../db/vault';
 import { exportBackup, inspectBackupFile, restoreBackupOnSetup } from '../export/export';
 import { useI18n } from '../i18n';
+import { APP_VERSION_LABEL } from '../version';
 import { EnvWarningBanner, LangToggle, MIN_PIN, PinInput } from './common';
 
 type Step = 'welcome' | 'pin' | 'recovery' | 'bio' | 'restore';
@@ -231,6 +232,9 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
             </button>
           </>
         )}
+        <div className="muted small" style={{ marginTop: 4, fontSize: '0.75rem' }}>
+          {APP_VERSION_LABEL}
+        </div>
       </div>
     </div>
   );

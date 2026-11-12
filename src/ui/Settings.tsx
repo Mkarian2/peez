@@ -15,6 +15,7 @@ import { localeFor, useI18n } from '../i18n';
 import { LangToggle, MIN_PIN, Modal, PinInput } from './common';
 import { useApp } from './context';
 import { SyncPanel } from './SyncPanel';
+import { APP_BUILD, APP_COMMIT, APP_VERSION } from '../version';
 
 export function Settings() {
   const { vault, settings, updateSettings, refresh, toast, lock, version } = useApp();
@@ -166,6 +167,18 @@ export function Settings() {
       <div className="card">
         <h2>{t.settings.aboutSection}</h2>
         <p className="muted small">{t.settings.aboutText}</p>
+        <div className="list">
+          <div className="list-item" style={{ cursor: 'default' }}>
+            <span className="muted small">{t.settings.versionLabel}</span>
+            <span className="small">v{APP_VERSION}</span>
+          </div>
+          <div className="list-item" style={{ cursor: 'default' }}>
+            <span className="muted small">{t.settings.buildNumberLabel}</span>
+            <span className="small">
+              #{APP_BUILD} ({APP_COMMIT})
+            </span>
+          </div>
+        </div>
       </div>
 
       <ChangePinModal open={modal === 'pin'} onClose={() => setModal(null)} />

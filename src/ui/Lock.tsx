@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { hasBiometric, unlockWithBiometric, unlockWithPin, unlockWithRecovery } from '../db/auth';
 import type { Vault } from '../db/vault';
 import { useI18n } from '../i18n';
+import { APP_VERSION_LABEL } from '../version';
 import { EnvWarningBanner, LangToggle, MIN_PIN, PinInput } from './common';
 
 export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
@@ -91,6 +92,9 @@ export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
         <button type="button" className="link-btn" onClick={() => setRecoveryMode(true)}>
           {t.lockScreen.forgotPin}
         </button>
+        <div className="muted small" style={{ marginTop: 4, fontSize: '0.75rem' }}>
+          {APP_VERSION_LABEL}
+        </div>
       </form>
     </div>
   );

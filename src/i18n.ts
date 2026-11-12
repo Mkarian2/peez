@@ -291,6 +291,8 @@ export const STRINGS = {
       aboutSection: 'About',
       aboutText:
         'Peez stores everything encrypted on this device only. Predictions are estimates and must not be used as contraception or medical advice.',
+      versionLabel: 'Version',
+      buildNumberLabel: 'Build',
       pinChangedToast: 'PIN changed',
       newPinPlaceholder: 'New PIN',
       repeatNewPinPlaceholder: 'Repeat new PIN',
@@ -531,6 +533,8 @@ export const STRINGS = {
       aboutSection: 'À propos',
       aboutText:
         'Peez stocke tout de manière chiffrée uniquement sur cet appareil. Les prévisions sont des estimations et ne doivent pas être utilisées comme contraception ou avis médical.',
+      versionLabel: 'Version',
+      buildNumberLabel: 'Build',
       pinChangedToast: 'Code PIN modifié',
       newPinPlaceholder: 'Nouveau PIN',
       repeatNewPinPlaceholder: 'Répétez le nouveau PIN',
