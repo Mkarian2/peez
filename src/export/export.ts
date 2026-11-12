@@ -7,11 +7,13 @@ import {
   toB64,
   unsealJson,
 } from '../crypto/crypto';
+import { getStoredWraps, normaliseRecovery, restoreVaultKeys, setup } from '../db/auth';
+import { keysFromRaw, unwrapWithPassphrase, type Vault, type WrappedKey } from '../db/vault';
 import { findCycles, findPeriods, predict } from '../domain/cycles';
 import { formatDate, todayISO } from '../domain/dates';
 import type { DayEntry, Settings, SyncRecord } from '../domain/types';
-import type { Vault } from '../db/vault';
 import { STRINGS, translateTag, type Lang } from '../i18n';
+import { loadPairing, savePairing, type Pairing } from '../sync/pairing';
 
 export function download(filename: string, blob: Blob): void {
   const url = URL.createObjectURL(blob);
@@ -104,7 +106,14 @@ export async function exportPdf(entries: DayEntry[], settings: Settings, lang: L
   doc.save(`peez-summary-${today}.pdf`);
 }
 
-interface BackupFile {
+interface SerializedWrap {
+  salt: string;
+  iterations: number;
+  iv: string;
+  ct: string;
+}
+
+interface BackupFileV1 {
   app: 'peez';
   v: 1;
   salt: string;
@@ -113,12 +122,86 @@ interface BackupFile {
   ct: string;
 }
 
-/** Encrypted backup — also usable as a manual sync fallback between devices. */
-export async function exportBackup(vault: Vault, passphrase: string): Promise<void> {
+export interface BackupFileV2 {
+  app: 'peez';
+  v: 2;
+  exportedAt: string;
+  pinWrap: SerializedWrap;
+  recoveryWrap?: SerializedWrap;
+  customWrap?: SerializedWrap;
+  iv: string;
+  ct: string;
+}
+
+type BackupFile = BackupFileV1 | BackupFileV2;
+
+interface BackupPayload {
+  records: SyncRecord[];
+  settings?: Settings;
+  pairing?: Pairing;
+}
+
+function encodeWrap(w: WrappedKey): SerializedWrap {
+  return {
+    salt: toB64(w.salt),
+    iterations: w.iterations,
+    iv: toB64(w.iv),
+    ct: toB64(w.ct),
+  };
+}
+
+function decodeWrap(w: SerializedWrap): WrappedKey {
+  return {
+    salt: fromB64(w.salt),
+    iterations: w.iterations,
+    iv: fromB64(w.iv),
+    ct: fromB64(w.ct),
+  };
+}
+
+/**
+ * Build a v2 encrypted backup blob protected by the user's existing PIN & Recovery Code
+ * (and optionally an extra custom passphrase if provided).
+ */
+export async function buildBackupObject(vault: Vault, passphrase?: string): Promise<BackupFileV2 | BackupFileV1> {
+  const { pinWrap, recoveryWrap } = await getStoredWraps();
+  const [settings, pairing] = await Promise.all([vault.getSettings(), loadPairing(vault)]);
+  const payload: BackupPayload = {
+    records: vault.allRecords(),
+    settings,
+    pairing,
+  };
+
+  if (pinWrap) {
+    const sealed = await sealJson(vault.keys.aes, payload);
+    const file: BackupFileV2 = {
+      app: 'peez',
+      v: 2,
+      exportedAt: todayISO(),
+      pinWrap: encodeWrap(pinWrap),
+      recoveryWrap: recoveryWrap ? encodeWrap(recoveryWrap) : undefined,
+      iv: toB64(sealed.iv),
+      ct: toB64(sealed.ct),
+    };
+    if (passphrase && passphrase.trim().length > 0) {
+      const salt = randomBytes(16);
+      const pwKey = await deriveKeyFromPassphrase(passphrase, salt);
+      const pwSealed = await sealJson(pwKey, { raw: toB64(vault.keys.raw) });
+      file.customWrap = {
+        salt: toB64(salt),
+        iterations: PBKDF2_ITERATIONS,
+        iv: toB64(pwSealed.iv),
+        ct: toB64(pwSealed.ct),
+      };
+    }
+    return file;
+  }
+
+  // Fallback to v1 format if no pinWrap is stored in meta (e.g. in isolated unit tests).
   const salt = randomBytes(16);
-  const key = await deriveKeyFromPassphrase(passphrase, salt);
-  const sealed = await sealJson(key, { records: vault.allRecords() });
-  const file: BackupFile = {
+  const key = await deriveKeyFromPassphrase(passphrase || '0000', salt);
+  const sealed = await sealJson(key, payload);
+  return {
     app: 'peez',
     v: 1,
     salt: toB64(salt),
@@ -126,10 +209,69 @@ export async function exportBackup(vault: Vault, passphrase: string): Promise<vo
     iv: toB64(sealed.iv),
     ct: toB64(sealed.ct),
   };
+}
+
+/**
+ * 1-tap encrypted backup — encrypted with the user's PIN and Recovery Code.
+ * Also usable as a manual sync fallback between devices.
+ */
+export async function exportBackup(vault: Vault, passphrase?: string): Promise<void> {
+  const file = await buildBackupObject(vault, passphrase);
+  await vault.setSecret('lastBackup', Date.now());
   download(`peez-backup-${todayISO()}.peez`, new Blob([JSON.stringify(file)], { type: 'application/octet-stream' }));
 }
 
-export async function importBackup(vault: Vault, file: File, passphrase: string): Promise<number> {
+export async function inspectBackupFile(file: File): Promise<{ version: 1 | 2; exportedAt?: string }> {
+  let parsed: BackupFile;
+  try {
+    parsed = JSON.parse(await file.text());
+    if (parsed.app !== 'peez' || (parsed.v !== 1 && parsed.v !== 2)) throw new Error();
+  } catch {
+    throw new Error('This is not a Peez backup file.');
+  }
+  return {
+    version: parsed.v,
+    exportedAt: parsed.v === 2 ? parsed.exportedAt : undefined,
+  };
+}
+
+async function unwrapV2RawKey(parsed: BackupFileV2, secret: string): Promise<{ raw: Uint8Array; usedRecovery: boolean }> {
+  const trimmed = secret.trim();
+  // 1. Try as PIN
+  try {
+    const raw = await unwrapWithPassphrase(decodeWrap(parsed.pinWrap), trimmed);
+    return { raw, usedRecovery: false };
+  } catch {
+    // continue
+  }
+  // 2. Try as Recovery Code
+  if (parsed.recoveryWrap) {
+    try {
+      const raw = await unwrapWithPassphrase(decodeWrap(parsed.recoveryWrap), normaliseRecovery(trimmed));
+      return { raw, usedRecovery: true };
+    } catch {
+      // continue
+    }
+  }
+  // 3. Try as optional custom backup password
+  if (parsed.customWrap) {
+    try {
+      const cw = decodeWrap(parsed.customWrap);
+      const pwKey = await deriveKeyFromPassphrase(trimmed, cw.salt, cw.iterations);
+      const res = await unsealJson<{ raw: string }>(pwKey, { iv: cw.iv, ct: cw.ct });
+      return { raw: fromB64(res.raw), usedRecovery: false };
+    } catch {
+      // continue
+    }
+  }
+  throw new Error('Wrong PIN, recovery code, or backup password.');
+}
+
+/**
+ * Import/merge a `.peez` backup into an already-unlocked vault.
+ * If the v2 backup comes from the same vault, it unlocks automatically without needing a password.
+ */
+export async function importBackup(vault: Vault, file: File, secret = ''): Promise<number> {
   let parsed: BackupFile;
   try {
     parsed = JSON.parse(await file.text());
@@ -137,12 +279,91 @@ export async function importBackup(vault: Vault, file: File, passphrase: string)
   } catch {
     throw new Error('This is not a Peez backup file.');
   }
-  const key = await deriveKeyFromPassphrase(passphrase, fromB64(parsed.salt), parsed.iterations);
-  let data: { records: SyncRecord[] };
+
+  let data: BackupPayload;
+  if (parsed.v === 2) {
+    const sealed = { iv: fromB64(parsed.iv), ct: fromB64(parsed.ct) };
+    // Try current vault key first (same account!)
+    try {
+      data = await unsealJson<BackupPayload>(vault.keys.aes, sealed);
+    } catch {
+      if (!secret.trim()) {
+        throw new Error('Enter the PIN or recovery code for this backup.');
+      }
+      const { raw } = await unwrapV2RawKey(parsed, secret);
+      const keys = await keysFromRaw(raw);
+      data = await unsealJson<BackupPayload>(keys.aes, sealed);
+    }
+  } else {
+    const key = await deriveKeyFromPassphrase(secret, fromB64(parsed.salt), parsed.iterations);
+    try {
+      data = await unsealJson<BackupPayload>(key, { iv: fromB64(parsed.iv), ct: fromB64(parsed.ct) });
+    } catch {
+      throw new Error('Wrong backup password.');
+    }
+  }
+
+  const applied = await vault.applyRemote(data.records);
+  await vault.setSecret('lastBackup', Date.now());
+  return applied;
+}
+
+/**
+ * Restore a `.peez` backup directly from the Welcome (`Setup`) screen when browser
+ * site data was cleared or when moving to a new device.
+ */
+export async function restoreBackupOnSetup(
+  file: File,
+  secret: string,
+  newPin?: string,
+): Promise<{ vault: Vault; applied: number; recoveryCode?: string }> {
+  let parsed: BackupFile;
   try {
-    data = await unsealJson(key, { iv: fromB64(parsed.iv), ct: fromB64(parsed.ct) });
+    parsed = JSON.parse(await file.text());
+    if (parsed.app !== 'peez') throw new Error();
+  } catch {
+    throw new Error('This is not a Peez backup file.');
+  }
+
+  if (parsed.v === 2) {
+    const { raw, usedRecovery } = await unwrapV2RawKey(parsed, secret);
+    const keys = await keysFromRaw(raw);
+    const data = await unsealJson<BackupPayload>(keys.aes, {
+      iv: fromB64(parsed.iv),
+      ct: fromB64(parsed.ct),
+    });
+
+    const vault = await restoreVaultKeys({
+      raw,
+      pinWrap: decodeWrap(parsed.pinWrap),
+      recoveryWrap: parsed.recoveryWrap ? decodeWrap(parsed.recoveryWrap) : undefined,
+      newPin: usedRecovery && newPin ? newPin : undefined,
+    });
+
+    const applied = await vault.applyRemote(data.records);
+    if (data.settings) {
+      await vault.setSecret('settings', data.settings);
+    }
+    if (data.pairing) {
+      await savePairing(vault, data.pairing);
+    }
+    await vault.setSecret('lastBackup', Date.now());
+    return { vault, applied };
+  }
+
+  // Legacy v1 backup file: decrypt records with backup password, then set up vault with newPin
+  if (!newPin || newPin.length < 4) {
+    throw new Error('Choose a PIN (at least 4 digits) to unlock your restored vault.');
+  }
+  const key = await deriveKeyFromPassphrase(secret, fromB64(parsed.salt), parsed.iterations);
+  let data: BackupPayload;
+  try {
+    data = await unsealJson<BackupPayload>(key, { iv: fromB64(parsed.iv), ct: fromB64(parsed.ct) });
   } catch {
     throw new Error('Wrong backup password.');
   }
-  return vault.applyRemote(data.records);
+  const { vault, recoveryCode } = await setup(newPin);
+  const applied = await vault.applyRemote(data.records);
+  await vault.setSecret('lastBackup', Date.now());
+  return { vault, applied, recoveryCode };
 }

@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { biometricAvailable } from '../crypto/webauthn';
 import { enableBiometric, setup } from '../db/auth';
 import type { Vault } from '../db/vault';
+import { exportBackup, inspectBackupFile, restoreBackupOnSetup } from '../export/export';
 import { useI18n } from '../i18n';
-import { LangToggle, MIN_PIN, PinInput } from './common';
+import { EnvWarningBanner, LangToggle, MIN_PIN, PinInput } from './common';
 
-type Step = 'welcome' | 'pin' | 'recovery' | 'bio';
+type Step = 'welcome' | 'pin' | 'recovery' | 'bio' | 'restore';
 
 export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
   const { t } = useI18n();
@@ -18,6 +19,12 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
   const [recovery, setRecovery] = useState('');
   const [saved, setSaved] = useState(false);
   const [bioOk, setBioOk] = useState(false);
+
+  // Restore step state
+  const [backupFile, setBackupFile] = useState<File | null>(null);
+  const [backupVersion, setBackupVersion] = useState<1 | 2 | null>(null);
+  const [restoreSecret, setRestoreSecret] = useState('');
+  const [restoreNewPin, setRestoreNewPin] = useState('');
 
   useEffect(() => {
     biometricAvailable().then(setBioOk);
@@ -33,6 +40,46 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
       setVault(r.vault);
       setRecovery(r.recoveryCode);
       setStep('recovery');
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onPickBackupFile(f: File | null) {
+    setBackupFile(f);
+    setBackupVersion(null);
+    setError('');
+    if (!f) return;
+    try {
+      const info = await inspectBackupFile(f);
+      setBackupVersion(info.version);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+
+  async function handleRestore() {
+    if (!backupFile || !restoreSecret.trim()) return;
+    setError('');
+    if (backupVersion === 1 && restoreNewPin.length < MIN_PIN) {
+      return setError(t.setup.pinTooShort(MIN_PIN));
+    }
+    setBusy(true);
+    try {
+      const r = await restoreBackupOnSetup(
+        backupFile,
+        restoreSecret,
+        restoreNewPin.length >= MIN_PIN ? restoreNewPin : undefined,
+      );
+      if (r.recoveryCode) {
+        setVault(r.vault);
+        setRecovery(r.recoveryCode);
+        setStep('recovery');
+      } else {
+        onDone(r.vault);
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -57,6 +104,7 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
     <div className="center-screen">
       <div className="card setup">
         <LangToggle />
+        <EnvWarningBanner />
         <div className="logo">💧</div>
         {step === 'welcome' && (
           <>
@@ -67,6 +115,53 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
             </div>
             <button className="btn primary block" onClick={() => setStep('pin')}>
               {t.setup.getStarted}
+            </button>
+            <button
+              type="button"
+              className="btn ghost block"
+              onClick={() => {
+                setError('');
+                setStep('restore');
+              }}
+            >
+              {t.setup.restoreExistingBtn}
+            </button>
+          </>
+        )}
+
+        {step === 'restore' && (
+          <>
+            <h1>{t.setup.restoreTitle}</h1>
+            <p className="muted small">{t.setup.restoreBody}</p>
+            <input
+              type="file"
+              accept=".peez,application/octet-stream,application/json"
+              onChange={(e) => onPickBackupFile(e.target.files?.[0] ?? null)}
+            />
+            <input
+              className="text-input"
+              type="password"
+              placeholder={t.setup.restoreSecretPlaceholder}
+              value={restoreSecret}
+              onChange={(e) => setRestoreSecret(e.target.value)}
+              autoComplete="off"
+            />
+            {backupVersion === 1 && (
+              <>
+                <p className="muted small">{t.setup.restoreV1PinHint}</p>
+                <PinInput value={restoreNewPin} onChange={setRestoreNewPin} placeholder={t.lockScreen.newPinPlaceholder} />
+              </>
+            )}
+            {error && <p className="error">{error}</p>}
+            <button
+              className="btn primary block"
+              disabled={busy || !backupFile || !restoreSecret.trim()}
+              onClick={handleRestore}
+            >
+              {busy ? t.settings.restoring : t.settings.restoreBtn}
+            </button>
+            <button type="button" className="btn ghost block" onClick={() => setStep('welcome')}>
+              {t.back}
             </button>
           </>
         )}
@@ -81,6 +176,9 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
             <button className="btn primary block" disabled={busy} onClick={createPin}>
               {busy ? t.setup.settingUp : t.continueBtn}
             </button>
+            <button type="button" className="btn ghost block" onClick={() => setStep('welcome')}>
+              {t.back}
+            </button>
           </>
         )}
 
@@ -94,6 +192,18 @@ export function Setup({ onDone }: { onDone: (v: Vault) => void }) {
             <button className="btn ghost block" onClick={() => navigator.clipboard?.writeText(recovery)}>
               {t.copy}
             </button>
+            {vault && (
+              <button
+                type="button"
+                className="btn ghost block"
+                onClick={async () => {
+                  await exportBackup(vault);
+                  setSaved(true);
+                }}
+              >
+                {t.setup.saveInitialBackupBtn}
+              </button>
+            )}
             <label className="check">
               <input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />{' '}
               {t.setup.recoverySavedCheck}

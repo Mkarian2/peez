@@ -1,22 +1,75 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { predict, predictionMarks } from '../domain/cycles';
 import { diffDays, formatDate, todayISO } from '../domain/dates';
+import { exportBackup } from '../export/export';
 import { useI18n } from '../i18n';
-import { useApp } from './context';
 import { Calendar } from './Calendar';
+import { EnvWarningBanner } from './common';
+import { useApp } from './context';
 import { DayEditor } from './DayEditor';
 
+const BACKUP_REMINDER_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export function Home() {
-  const { vault, settings, version } = useApp();
+  const { vault, settings, version, toast, refresh } = useApp();
+  const { t } = useI18n();
   const today = todayISO();
   const entries = useMemo(() => vault.entries(), [vault, version]);
   const prediction = useMemo(() => predict(entries, settings, today), [entries, settings, today]);
   const marks = useMemo(() => predictionMarks(prediction, today), [prediction, today]);
   const [editing, setEditing] = useState<string | null>(null);
+  const [showBackupPrompt, setShowBackupPrompt] = useState(false);
+  const [dismissedPrompt, setDismissedPrompt] = useState(false);
+
+  useEffect(() => {
+    if (entries.length === 0 || dismissedPrompt) {
+      setShowBackupPrompt(false);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      vault.getSecret<number>('lastBackup'),
+      vault.getSecret<number>('lastSync'),
+      vault.getSecret<number>('lastModified'),
+    ]).then(([lastBackup, lastSync, lastModified]) => {
+      if (cancelled) return;
+      const lastSafe = Math.max(lastBackup ?? 0, lastSync ?? 0);
+      const lastMod = lastModified ?? 0;
+      const needsBackup = lastSafe === 0 || (lastMod > lastSafe && Date.now() - lastSafe > BACKUP_REMINDER_INTERVAL_MS);
+      setShowBackupPrompt(needsBackup);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [vault, entries.length, version, dismissedPrompt]);
+
+  async function saveOneTapBackup() {
+    await exportBackup(vault);
+    setShowBackupPrompt(false);
+    toast(t.settings.backupDownloadedToast);
+    refresh();
+  }
 
   return (
     <>
+      <EnvWarningBanner />
       <Summary prediction={prediction} today={today} onLogToday={() => setEditing(today)} />
+      {showBackupPrompt && (
+        <div className="card backup-banner">
+          <div className="backup-banner-text">
+            <strong>{t.backupPrompt.title}</strong>
+            <span className="muted small">{t.backupPrompt.body}</span>
+          </div>
+          <div className="row">
+            <button className="btn primary" onClick={saveOneTapBackup}>
+              {t.backupPrompt.saveBtn}
+            </button>
+            <button className="btn ghost" onClick={() => setDismissedPrompt(true)}>
+              {t.backupPrompt.laterBtn}
+            </button>
+          </div>
+        </div>
+      )}
       <div className="card">
         <Calendar entries={entries} marks={marks} today={today} onSelect={setEditing} />
       </div>

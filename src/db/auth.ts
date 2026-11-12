@@ -1,6 +1,7 @@
 import { hkdfAesKey, randomBytes, seal, toB64, unseal, type Sealed } from '../crypto/crypto';
 import { evaluateBiometric, registerBiometric } from '../crypto/webauthn';
-import { db, delMeta, getMeta, setMeta } from './db';
+import { delMeta, getMeta, setMeta, wipeAllStorage } from './db';
+import { ensurePersistentStorage } from './storageHealth';
 import { keysFromRaw, unwrapWithPassphrase, Vault, wrapWithPassphrase, type WrappedKey } from './vault';
 
 /**
@@ -9,8 +10,8 @@ import { keysFromRaw, unwrapWithPassphrase, Vault, wrapWithPassphrase, type Wrap
  * code, and optionally once with a fingerprint/Windows Hello secret.
  */
 
-const PIN_WRAP = 'pinWrap';
-const RECOVERY_WRAP = 'recoveryWrap';
+export const PIN_WRAP = 'pinWrap';
+export const RECOVERY_WRAP = 'recoveryWrap';
 const BIO_WRAP = 'bioWrap';
 const DEVICE_ID = 'deviceId';
 
@@ -27,7 +28,7 @@ function newRecoveryCode(): string {
   return chars.match(/.{4}/g)!.join('-');
 }
 
-function normaliseRecovery(code: string): string {
+export function normaliseRecovery(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
@@ -41,13 +42,18 @@ async function getDeviceId(): Promise<string> {
 }
 
 async function openVault(raw: Uint8Array): Promise<Vault> {
+  // Re-request persistent storage on every unlock: browsers often reject it on first
+  // visit (0 engagement) and grant it once the user returns or installs the PWA.
+  void ensurePersistentStorage();
   const vault = new Vault(await keysFromRaw(raw), await getDeviceId());
   await vault.load();
   return vault;
 }
 
 export async function isSetUp(): Promise<boolean> {
-  return !!(await getMeta(PIN_WRAP));
+  const ok = !!(await getMeta(PIN_WRAP));
+  if (ok) void ensurePersistentStorage();
+  return ok;
 }
 
 export async function setup(pin: string): Promise<{ vault: Vault; recoveryCode: string }> {
@@ -55,9 +61,34 @@ export async function setup(pin: string): Promise<{ vault: Vault; recoveryCode: 
   const recoveryCode = newRecoveryCode();
   await setMeta(PIN_WRAP, await wrapWithPassphrase(raw, pin));
   await setMeta(RECOVERY_WRAP, await wrapWithPassphrase(raw, normaliseRecovery(recoveryCode)));
-  // Ask the browser not to evict our data under storage pressure.
-  await navigator.storage?.persist?.().catch(() => false);
+  await ensurePersistentStorage();
   return { vault: await openVault(raw), recoveryCode };
+}
+
+/**
+ * Restore wrapped keys into local storage during Welcome-screen backup recovery.
+ */
+export async function restoreVaultKeys(params: {
+  raw: Uint8Array;
+  pinWrap: WrappedKey;
+  recoveryWrap?: WrappedKey;
+  newPin?: string;
+}): Promise<Vault> {
+  const finalPinWrap = params.newPin ? await wrapWithPassphrase(params.raw, params.newPin) : params.pinWrap;
+  await setMeta(PIN_WRAP, finalPinWrap);
+  if (params.recoveryWrap) {
+    await setMeta(RECOVERY_WRAP, params.recoveryWrap);
+  }
+  await ensurePersistentStorage();
+  return openVault(params.raw);
+}
+
+export async function getStoredWraps(): Promise<{ pinWrap?: WrappedKey; recoveryWrap?: WrappedKey }> {
+  const [pinWrap, recoveryWrap] = await Promise.all([
+    getMeta<WrappedKey>(PIN_WRAP),
+    getMeta<WrappedKey>(RECOVERY_WRAP),
+  ]);
+  return { pinWrap, recoveryWrap };
 }
 
 export async function unlockWithPin(pin: string): Promise<Vault> {
@@ -102,7 +133,7 @@ export async function hasBiometric(): Promise<boolean> {
 export async function enableBiometric(vault: Vault): Promise<void> {
   const reg = await registerBiometric();
   const key = await hkdfAesKey(reg.prfOutput, 'peez-bio-wrap');
-  const wrap: BioWrap = { credentialId: reg.credentialId, prfSalt: reg.prfSalt, ...(await seal(key, vault.keys.raw)) };
+  const wrap: BioWrap = { credentialId: reg.prfSalt ? reg.credentialId : reg.credentialId, prfSalt: reg.prfSalt, ...(await seal(key, vault.keys.raw)) };
   await setMeta(BIO_WRAP, wrap);
 }
 
@@ -118,7 +149,7 @@ export async function unlockWithBiometric(): Promise<Vault> {
   return openVault(await unseal(key, w));
 }
 
-/** Irreversibly delete all local data. */
+/** Irreversibly delete all local data across all storage layers. */
 export async function wipeEverything(): Promise<void> {
-  await db.delete();
+  await wipeAllStorage();
 }

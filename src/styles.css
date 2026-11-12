@@ -125,6 +125,51 @@ textarea {
   font-size: 0.9rem;
   text-align: left;
 }
+.warning-banner {
+  background: #fff3cd;
+  border: 1.5px solid #f0c36d;
+  color: #5c4308;
+}
+.backup-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 1.5px solid var(--lavender);
+  background: #faf6ff;
+}
+.backup-banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 220px;
+}
+.storage-status {
+  background: var(--lavender-light);
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9rem;
+}
+.storage-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.storage-badge {
+  background: white;
+  color: #4a6f5d;
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
 .stack {
   display: flex;
   flex-direction: column;

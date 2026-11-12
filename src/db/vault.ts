@@ -11,7 +11,7 @@ import {
   unsealJson,
   type Sealed,
 } from '../crypto/crypto';
-import { db, getMeta, setMeta } from './db';
+import { getAllRecordRows, getMeta, putRecordRows, setMeta } from './db';
 import { mergeRecords } from '../sync/merge';
 import { DEFAULT_SETTINGS, type DayEntry, type Settings, type SyncRecord } from '../domain/types';
 
@@ -61,7 +61,7 @@ export class Vault {
 
   async load(): Promise<void> {
     this.records.clear();
-    const rows = await db.records.toArray();
+    const rows = await getAllRecordRows();
     for (const row of rows) {
       const rec = await unsealJson<SyncRecord>(this.keys.aes, row);
       this.records.set(rec.date, rec);
@@ -82,7 +82,7 @@ export class Vault {
     const rows = await Promise.all(
       recs.map(async (r) => ({ id: await this.idFor(r.date), ...(await sealJson(this.keys.aes, r)) })),
     );
-    await db.records.bulkPut(rows);
+    await putRecordRows(rows);
     for (const r of recs) this.records.set(r.date, r);
   }
 
@@ -103,15 +103,16 @@ export class Vault {
   }
 
   async saveEntry(entry: DayEntry): Promise<void> {
-    await this.putMany([
-      { date: entry.date, updatedAt: this.nextTimestamp(entry.date), deviceId: this.deviceId, deleted: false, entry },
-    ]);
+    const now = this.nextTimestamp(entry.date);
+    await this.putMany([{ date: entry.date, updatedAt: now, deviceId: this.deviceId, deleted: false, entry }]);
+    await this.setSecret('lastModified', Date.now());
   }
 
   /** Deletion is a tombstone so that it propagates through sync. */
   async deleteEntry(date: string): Promise<void> {
     if (!this.records.has(date)) return;
     await this.putMany([{ date, updatedAt: this.nextTimestamp(date), deviceId: this.deviceId, deleted: true }]);
+    await this.setSecret('lastModified', Date.now());
   }
 
   allRecords(): SyncRecord[] {

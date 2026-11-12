@@ -8,24 +8,32 @@ import {
   regenerateRecoveryCode,
   wipeEverything,
 } from '../db/auth';
+import { getStorageHealth, type StorageHealth } from '../db/storageHealth';
 import type { Settings as SettingsT } from '../domain/types';
 import { exportBackup, exportCsv, exportPdf, importBackup } from '../export/export';
-import { useI18n } from '../i18n';
+import { localeFor, useI18n } from '../i18n';
 import { LangToggle, MIN_PIN, Modal, PinInput } from './common';
 import { useApp } from './context';
 import { SyncPanel } from './SyncPanel';
 
 export function Settings() {
-  const { vault, settings, updateSettings, refresh, toast, lock } = useApp();
+  const { vault, settings, updateSettings, refresh, toast, lock, version } = useApp();
   const { lang, t } = useI18n();
   const [bioAvailable, setBioAvailable] = useState(false);
   const [bioOn, setBioOn] = useState(false);
+  const [health, setHealth] = useState<StorageHealth | null>(null);
+  const [lastBackup, setLastBackup] = useState<number | undefined>();
   const [modal, setModal] = useState<null | 'pin' | 'recovery' | 'backup' | 'restore' | 'wipe'>(null);
 
   useEffect(() => {
     biometricAvailable().then(setBioAvailable);
     hasBiometric().then(setBioOn);
+    getStorageHealth().then(setHealth);
   }, []);
+
+  useEffect(() => {
+    vault.getSecret<number>('lastBackup').then(setLastBackup);
+  }, [vault, version]);
 
   async function toggleBio() {
     try {
@@ -43,6 +51,7 @@ export function Settings() {
   }
 
   const setNum = (key: keyof SettingsT, v: number) => updateSettings({ ...settings, [key]: v });
+  const loc = localeFor(lang);
 
   return (
     <>
@@ -120,6 +129,21 @@ export function Settings() {
 
       <div className="card">
         <h2>{t.settings.dataSection}</h2>
+        {health && (
+          <div className="storage-status">
+            <div className="storage-status-row">
+              <span>{t.settings.storageStatusLabel}</span>
+              <span className="storage-badge">
+                {health.persisted ? t.settings.storagePersistedBadge : t.settings.storageMirroredBadge}
+              </span>
+            </div>
+            <div className="muted small">
+              {lastBackup
+                ? t.settings.lastBackupLabel(new Date(lastBackup).toLocaleString(loc))
+                : t.settings.neverBackedUp}
+            </div>
+          </div>
+        )}
         <div className="list">
           <button className="list-item" onClick={() => exportPdf(vault.entries(), settings, lang)}>
             {t.settings.exportPdf} <span>📄</span>
@@ -146,7 +170,7 @@ export function Settings() {
 
       <ChangePinModal open={modal === 'pin'} onClose={() => setModal(null)} />
       <RecoveryModal open={modal === 'recovery'} onClose={() => setModal(null)} />
-      <BackupModal open={modal === 'backup'} onClose={() => setModal(null)} />
+      <BackupModal open={modal === 'backup'} onClose={() => setModal(null)} onDone={refresh} />
       <RestoreModal open={modal === 'restore'} onClose={() => setModal(null)} onDone={refresh} />
       <WipeModal open={modal === 'wipe'} onClose={() => setModal(null)} />
     </>
@@ -222,7 +246,7 @@ function RecoveryModal({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
-function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function BackupModal({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { vault, toast } = useApp();
   const { t } = useI18n();
   const [pw, setPw] = useState('');
@@ -237,6 +261,7 @@ function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           await exportBackup(vault, pw);
           setBusy(false);
           setPw('');
+          onDone();
           toast(t.settings.backupDownloadedToast);
           onClose();
         }}
@@ -249,7 +274,7 @@ function BackupModal({ open, onClose }: { open: boolean; onClose: () => void }) 
           value={pw}
           onChange={(e) => setPw(e.target.value)}
         />
-        <button className="btn primary block" disabled={busy || pw.length < 4}>
+        <button className="btn primary block" disabled={busy}>
           {busy ? t.settings.encrypting : t.settings.downloadBackup}
         </button>
       </form>
@@ -296,12 +321,12 @@ function RestoreModal({ open, onClose, onDone }: { open: boolean; onClose: () =>
         <input
           className="text-input"
           type="password"
-          placeholder={t.settings.backupPwPlaceholder}
+          placeholder={t.settings.restoreSecretOptionalPlaceholder}
           value={pw}
           onChange={(e) => setPw(e.target.value)}
         />
         {err && <p className="error">{err}</p>}
-        <button className="btn primary block" disabled={busy || !file || !pw}>
+        <button className="btn primary block" disabled={busy || !file}>
           {busy ? t.settings.restoring : t.settings.restoreBtn}
         </button>
       </form>

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { hasBiometric, unlockWithBiometric, unlockWithPin, unlockWithRecovery } from '../db/auth';
 import type { Vault } from '../db/vault';
 import { useI18n } from '../i18n';
-import { LangToggle, MIN_PIN, PinInput } from './common';
+import { EnvWarningBanner, LangToggle, MIN_PIN, PinInput } from './common';
 
 export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
   const { t } = useI18n();
@@ -75,6 +75,7 @@ export function Lock({ onUnlock }: { onUnlock: (v: Vault) => void }) {
         }}
       >
         <LangToggle />
+        <EnvWarningBanner />
         <div className="logo">💧</div>
         <h1>{t.lockScreen.lockedTitle}</h1>
         <PinInput value={pin} onChange={setPin} autoFocus />

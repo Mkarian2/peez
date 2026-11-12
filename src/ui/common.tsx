@@ -1,5 +1,20 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { detectInAppBrowser, detectIosBrowserTab } from '../db/storageHealth';
 import { useI18n } from '../i18n';
+
+export function EnvWarningBanner() {
+  const { t } = useI18n();
+  const [inApp] = useState(detectInAppBrowser);
+  const [iosTab] = useState(detectIosBrowserTab);
+
+  if (!inApp && !iosTab) return null;
+
+  return (
+    <div className="notice warning-banner" role="alert">
+      {inApp ? t.envWarning.inAppBrowser : t.envWarning.iosTab}
+    </div>
+  );
+}
 
 export function Modal({
   open,
